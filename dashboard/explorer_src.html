@@ -1,0 +1,870 @@
+<title>Tiny LLM Explorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a "type case". Each lesson is a bench with a short explanation on the left and a hands-on tool on the right; stacks on phones. */
+:root {
+  --paper: #eef1f7;
+  --surface: #ffffff;
+  --ink: #141b2d;
+  --muted: #586179;
+  --line: #d9dfea;
+  --accent: #2747d6;
+  --accent-soft: #e3e8fc;
+  --glow: #e89a00;
+  --glow-rgb: 232, 154, 0;
+  --good: #137a43;
+  --good-soft: #d7f2e3;
+  --bad: #b8322a;
+  --bad-soft: #fbe1de;
+  --term: #10162a;
+  --term-ink: #e6eaf5;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0d1220; --surface: #161d2f; --ink: #e8ecf6; --muted: #9ba5bd; --line: #283149;
+    --accent: #8099ff; --accent-soft: #1f2952; --glow: #f5b53a; --glow-rgb: 245, 181, 58;
+    --good: #45c785; --good-soft: #143326; --bad: #f2776c; --bad-soft: #3a1c1b;
+    --term: #090d18; --term-ink: #e6eaf5; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0d1220; --surface: #161d2f; --ink: #e8ecf6; --muted: #9ba5bd; --line: #283149;
+  --accent: #8099ff; --accent-soft: #1f2952; --glow: #f5b53a; --glow-rgb: 245, 181, 58;
+  --good: #45c785; --good-soft: #143326; --bad: #f2776c; --bad-soft: #3a1c1b;
+  --term: #090d18; --term-ink: #e6eaf5; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 17px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 48px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(34px, 6vw, 58px); font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: clamp(26px, 3.6vw, 36px); font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: 18px; font-weight: 700; }
+p { margin: 0; max-width: 62ch; }
+button, input, textarea, select { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* header */
+header.top { padding-block: 28px 8px; display: grid; gap: 14px; }
+.kicker { font-family: var(--mono); font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.lede { font-size: 19px; color: var(--muted); }
+.hero-type { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.hero-type .tile { width: 38px; }
+
+/* tabs */
+nav.tabs {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--paper);
+  display: flex; gap: 6px; overflow-x: auto; padding-block: 12px; margin-top: 8px; border-bottom: 1px solid var(--line);
+  scrollbar-width: thin;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--paper); }
+nav.tabs a {
+  flex: none; text-decoration: none; color: var(--ink); border: 1px solid var(--line); background: var(--surface);
+  border-radius: 999px; padding: 7px 14px; font-size: 15px; display: flex; gap: 8px; align-items: center;
+}
+nav.tabs a .n { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+nav.tabs a[aria-current="page"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+nav.tabs a[aria-current="page"] .n { color: var(--paper); opacity: 0.7; }
+
+/* sections */
+section.lesson { scroll-margin-top: 80px; display: grid; grid-template-columns: minmax(0, 330px) minmax(0, 1fr); gap: 28px; padding-block: 30px; }
+section.lesson > .explain { display: grid; gap: 14px; align-content: start; }
+section.lesson > .bench { display: grid; gap: 16px; align-content: start; min-width: 0; }
+@media (max-width: 860px) { section.lesson { grid-template-columns: minmax(0, 1fr); gap: 18px; } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 12px; min-width: 0; }
+.panel-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.label { font-family: var(--mono); font-size: 12px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.note { font-size: 15px; color: var(--muted); }
+.callout { border-left: 3px solid var(--glow); padding: 4px 0 4px 12px; font-size: 16px; }
+.big { font-family: var(--display); font-size: 34px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
+
+/* type tiles */
+.tiles { display: flex; flex-wrap: wrap; gap: 5px; }
+.tile {
+  width: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper);
+  display: grid; justify-items: center; padding: 3px 0 2px; font-family: var(--mono);
+}
+.tile b { font-size: 18px; font-weight: 600; line-height: 1.3; }
+.tile small { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tile.unknown { background: var(--bad-soft); border-color: var(--bad); }
+.tile.unknown small { color: var(--bad); }
+.tile.hit { background: var(--accent-soft); border-color: var(--accent); }
+.dots { display: flex; flex-wrap: wrap; gap: 4px; }
+.dots span { width: 13px; height: 13px; border-radius: 3px; background: var(--line); }
+.dots span.on { background: var(--glow); }
+
+/* controls */
+.btn {
+  border: 1px solid var(--ink); background: var(--ink); color: var(--paper); border-radius: 10px;
+  padding: 8px 16px; cursor: pointer; font-weight: 700;
+}
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+textarea, input[type="text"] {
+  width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); padding: 10px 12px;
+  font-family: var(--mono); font-size: 15px;
+}
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.slider-row { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; }
+.slider-row output { font-family: var(--mono); font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; font-weight: 600; }
+
+/* text displays */
+pre.term {
+  margin: 0; background: var(--term); color: var(--term-ink); border-radius: 10px; padding: 12px 14px;
+  font-family: var(--mono); font-size: 14px; line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+  max-height: 260px; overflow: auto;
+}
+pre.term .new { color: #ffcf66; }
+.ctx { font-family: var(--mono); font-size: 17px; line-height: 1.8; word-break: break-word; white-space: pre-wrap; }
+.ctx .cursor { display: inline-block; min-width: 1.2em; text-align: center; border-bottom: 3px solid var(--accent); color: var(--accent); font-weight: 600; }
+
+/* probability bars */
+.bars { display: grid; gap: 5px; }
+.bar { display: grid; grid-template-columns: 38px 1fr 56px; gap: 10px; align-items: center; font-size: 14px; }
+.bar .ch { font-family: var(--mono); font-weight: 600; text-align: center; background: var(--paper); border: 1px solid var(--line); border-radius: 5px; }
+.bar .track { height: 18px; background: var(--paper); border-radius: 5px; overflow: hidden; }
+.bar .fill { height: 100%; background: var(--accent); border-radius: 5px; transition: width 0.25s ease; }
+.bar.answer .fill { background: var(--good); }
+.bar.answer .ch { background: var(--good-soft); border-color: var(--good); }
+.bar .pct { font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+/* attention */
+.att { font-family: var(--mono); font-size: 17px; line-height: 2.05; word-break: break-all; }
+.att span { border-radius: 3px; }
+.att .q { outline: 2px dashed var(--accent); border-radius: 4px; padding: 0 4px; color: var(--accent); }
+.words { display: flex; flex-wrap: wrap; gap: 6px; font-size: 20px; }
+.words button {
+  border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; cursor: pointer;
+  background: rgba(var(--glow-rgb), var(--a, 0));
+}
+.words button.sel { outline: 3px solid var(--accent); }
+
+/* game */
+.score { display: flex; gap: 24px; flex-wrap: wrap; }
+.score div { display: grid; }
+.verdict { font-weight: 700; font-size: 18px; }
+.verdict.yes { color: var(--good); }
+.verdict.no { color: var(--bad); }
+.guess-input { width: 64px !important; text-align: center; font-size: 22px !important; }
+
+/* charts */
+svg text { fill: var(--muted); font-family: var(--mono); font-size: 11px; }
+.chart-wrap { overflow-x: auto; }
+
+/* replay */
+.drop { border: 2px dashed var(--line); border-radius: 12px; padding: 14px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.stage { font-family: var(--display); font-size: 21px; font-weight: 700; }
+.pill { font-family: var(--mono); font-size: 12px; border-radius: 999px; padding: 3px 10px; background: var(--accent-soft); color: var(--accent); justify-self: start; }
+
+/* scale */
+.scale-row { display: grid; grid-template-columns: minmax(0, 150px) 1fr; gap: 12px; align-items: center; }
+.scale-row .track { height: 26px; background: var(--paper); border-radius: 6px; position: relative; }
+.scale-row .fill { height: 100%; border-radius: 6px; background: var(--accent); min-width: 4px; }
+.scale-row.you .fill { background: var(--glow); }
+.scale-row .val { position: absolute; left: 8px; top: 0; line-height: 26px; font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.scale-row .val.inside { color: var(--paper); }
+[hidden] { display: none !important; }
+.steps { display: grid; gap: 10px; counter-reset: step; }
+.steps li { list-style: none; display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: start; }
+.steps li::before { counter-increment: step; content: counter(step); font-family: var(--mono); font-weight: 600; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.steps li.done::before { background: var(--glow); color: var(--term); }
+.steps { padding: 0; margin: 0; }
+
+footer { margin-top: 30px; border-top: 1px solid var(--line); padding-top: 16px; font-size: 14px; color: var(--muted); }
+footer a { color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <span class="kicker">Classroom companion · Train Your Own Mini-LLM</span>
+    <h1>Tiny LLM Explorer</h1>
+    <p class="lede">See what's going on inside a language model while yours trains on Kaggle. Each tab is one idea. Go in order, or jump to the one your teacher is talking about.</p>
+    <div class="hero-type" id="hero" aria-label="To be or not to be"></div>
+  </header>
+
+  <nav class="tabs" aria-label="Lessons">
+    <a href="#tokens"><span class="n">1</span>Letters → numbers</a>
+    <a href="#guess"><span class="n">2</span>Guess the next letter</a>
+    <a href="#memory"><span class="n">3</span>Memory</a>
+    <a href="#dice"><span class="n">4</span>Rolling the dice</a>
+    <a href="#attention"><span class="n">5</span>Attention</a>
+    <a href="#replay"><span class="n">6</span>Replay a training run</a>
+    <a href="#scale"><span class="n">7</span>Tiny vs. giant</a>
+  </nav>
+
+  <!-- 1. TOKENS -->
+  <section class="lesson" id="tokens">
+    <div class="explain">
+      <h2>Letters become numbers</h2>
+      <p>A computer can't read. Before a model sees any text, every character is swapped for an ID number. Each piece is called a <b>token</b>.</p>
+      <p>Your model's whole alphabet is the characters that appear in Shakespeare's plays: 65 of them, including space and newline.</p>
+      <p class="callout">Characters it has never seen (like emoji or é) don't exist for it. It can't read them or write them.</p>
+    </div>
+    <div class="bench">
+      <div class="panel">
+        <label class="label" for="tok-input">Type anything</label>
+        <textarea id="tok-input" rows="2">To be, or not to be 🤔</textarea>
+        <div class="tiles" id="tok-tiles"></div>
+        <p class="note" id="tok-summary"></p>
+      </div>
+      <div class="panel">
+        <span class="label">The model's full alphabet (character → ID)</span>
+        <div class="tiles" id="vocab-tiles"></div>
+      </div>
+      <div class="panel">
+        <span class="label">How big models do it</span>
+        <p>ChatGPT and Claude use chunks of words instead of single letters, so text takes fewer tokens:</p>
+        <div class="tiles" style="gap:8px">
+          <span class="tile" style="width:auto;padding:4px 10px"><b>un</b></span><span class="tile" style="width:auto;padding:4px 10px"><b>believ</b></span><span class="tile" style="width:auto;padding:4px 10px"><b>able</b></span>
+          <span style="width:16px"></span>
+          <span class="tile" style="width:auto;padding:4px 10px"><b>Shakes</b></span><span class="tile" style="width:auto;padding:4px 10px"><b>peare</b></span>
+        </div>
+        <p class="note">Same idea, bigger pieces. The model still just sees a list of numbers.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. GUESS -->
+  <section class="lesson" id="guess" hidden>
+    <div class="explain">
+      <h2>Guess the next letter</h2>
+      <p>This is the <b>only</b> game a language model ever plays: read some text, then guess what comes next.</p>
+      <p>Play a few rounds against a simple model that learned by counting which letters follow which in Shakespeare.</p>
+      <p class="callout">When you're surprised by the answer, you learn something. Training is the model playing this game millions of times, adjusting itself a tiny bit after each surprise.</p>
+    </div>
+    <div class="bench">
+      <div class="panel">
+        <span class="label">What comes next?</span>
+        <div class="ctx" id="game-ctx"></div>
+        <div class="controls">
+          <label for="game-input" class="note">Type one key (space counts):</label>
+          <input id="game-input" class="guess-input" type="text" maxlength="1" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <button class="btn ghost" id="game-skip">Show me</button>
+          <button class="btn" id="game-next" hidden>Next round →</button>
+        </div>
+        <div id="game-result" hidden>
+          <div class="verdict" id="game-verdict"></div>
+          <div class="panel-row" style="margin-top:10px">
+            <div style="display:grid;gap:8px"><span class="label">The model's top guesses</span><div class="bars" id="game-bars"></div></div>
+            <div style="display:grid;gap:8px;align-content:start"><span class="label">How surprised was the model?</span>
+              <p id="game-surprise"></p></div>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="score">
+          <div><span class="label">You</span><span class="big" id="score-you">0 / 0</span></div>
+          <div><span class="label">Counting model</span><span class="big" id="score-model">0 / 0</span></div>
+        </div>
+        <p class="note">The model "wins" a round if its top guess is right.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. MEMORY -->
+  <section class="lesson" id="memory" hidden>
+    <div class="explain">
+      <h2>How much can it remember?</h2>
+      <p>To guess well, a model needs to look back at what came before. Slide to change how many letters this counting model gets to look back at.</p>
+      <p>Watch the <b>confusion score</b>: how many letters it's effectively choosing between. Lower is better.</p>
+      <p class="callout">Something strange happens after about 4 letters: it gets <i>worse</i>. Longer snippets are mostly ones it has never seen before, and counting can't handle anything new.</p>
+      <p>A Transformer fixes this. It learns <i>patterns</i> instead of memorising exact snippets, so it can look back 128 letters and still make sense of text it has never seen.</p>
+    </div>
+    <div class="bench">
+      <div class="panel">
+        <div class="slider-row">
+          <label for="mem-k" class="label">Looks back</label>
+          <input type="range" id="mem-k" min="0" max="10" value="3">
+          <output id="mem-k-out" for="mem-k">3</output>
+        </div>
+        <div class="panel-row">
+          <div style="display:grid;gap:8px;align-content:start">
+            <span class="label">Confusion</span>
+            <span class="big" id="mem-conf"></span>
+            <div class="dots" id="mem-dots"></div>
+          </div>
+          <div class="chart-wrap" id="mem-chart"></div>
+        </div>
+        <span class="label">What it writes with this much memory</span>
+        <pre class="term" id="mem-sample"></pre>
+        <div class="controls"><button class="btn ghost" id="mem-again">Write again</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. DICE -->
+  <section class="lesson" id="dice" hidden>
+    <div class="explain">
+      <h2>Rolling the dice</h2>
+      <p>A model never picks "the answer". It gives every possible next letter a probability, then <b>rolls weighted dice</b>. That's why you get a different answer each time you ask ChatGPT the same question.</p>
+      <p><b>Temperature</b> changes the dice:</p>
+      <p>❄️ <b>Low</b> (0.2): it almost always picks the favourite. Safe, but it repeats itself.<br>🔥 <b>High</b> (1.8): unlikely letters get a real chance. Creative at first, then chaos.</p>
+    </div>
+    <div class="bench">
+      <div class="panel">
+        <label class="label" for="dice-prompt">Start of the text</label>
+        <input type="text" id="dice-prompt" value="ROMEO: What light through yonder window b">
+        <div class="slider-row">
+          <label for="dice-t" class="label">Temperature</label>
+          <input type="range" id="dice-t" min="0.1" max="2" step="0.05" value="0.8">
+          <output id="dice-t-out" for="dice-t">0.8</output>
+        </div>
+        <span class="label">Chances for the next letter</span>
+        <div class="bars" id="dice-bars"></div>
+        <div class="controls">
+          <button class="btn" id="dice-roll">🎲 Roll once</button>
+          <button class="btn ghost" id="dice-many">Write 120 letters</button>
+          <button class="btn ghost" id="dice-reset">Reset</button>
+        </div>
+        <pre class="term" id="dice-out"></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. ATTENTION -->
+  <section class="lesson" id="attention" hidden>
+    <div class="explain">
+      <h2>Paying attention</h2>
+      <p>"Attention" is the big idea behind Transformers. Before guessing, each word (or letter) looks back at everything earlier and decides <b>which parts matter right now</b>.</p>
+      <p>Nobody programs these choices. The model works them out during training, because paying attention to the right things makes its guesses less surprising.</p>
+    </div>
+    <div class="bench">
+      <div class="panel">
+        <span class="label">Example: what does "it" mean?</span>
+        <div class="controls">
+          <button class="btn ghost" data-sent="0" id="att-s0">…because it was too tired</button>
+          <button class="btn ghost" data-sent="1" id="att-s1">…because it was too wide</button>
+        </div>
+        <div class="words" id="att-words"></div>
+        <p class="note" id="att-explain"></p>
+        <p class="note"><i>This example is drawn by hand to show the idea. Real models learn patterns like this on their own.</i></p>
+      </div>
+      <div class="panel">
+        <span class="label">Inside a real model: <span id="att-source"></span></span>
+        <div class="att" id="att-real"></div>
+        <p class="note">To guess the next letter after the <span class="q" style="font-family:var(--mono)">?</span>, the model looked back at these letters. Brighter means more attention. Usually it focuses on the last few letters of the current word, and sometimes it reaches further back.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. REPLAY -->
+  <section class="lesson" id="replay" hidden>
+    <div class="explain">
+      <h2>Replay a training run</h2>
+      <p>At the end of the Kaggle notebook you saved <code>training_log.json</code>. Load it here to replay your model's training, step by step.</p>
+      <p>Until you load one, this shows an example run your teacher prepared.</p>
+      <p class="callout">Drag the slider back to the start. Then press play and watch the writing go from gibberish to words.</p>
+    </div>
+    <div class="bench">
+      <div class="drop" id="drop">
+        <div style="display:grid;gap:2px"><span class="label">Now showing</span><b id="rp-source"></b></div>
+        <label class="btn ghost" for="rp-file" style="display:inline-block">Load training_log.json</label>
+        <input type="file" id="rp-file" accept=".json,application/json" hidden>
+      </div>
+      <div class="panel">
+        <div class="controls" style="flex-wrap:nowrap">
+          <button class="btn" id="rp-play" style="min-width:96px">▶ Play</button>
+          <input type="range" id="rp-slider" min="0" max="0" value="0" aria-label="Moment in training">
+        </div>
+        <div class="controls" style="justify-content:space-between">
+          <span class="pill" id="rp-when"></span>
+          <span class="note" id="rp-stats"></span>
+        </div>
+        <div class="chart-wrap" id="rp-chart"></div>
+        <p class="note"><span style="color:var(--accent)">━</span> surprise on practice text &nbsp; <span style="color:var(--glow)">●</span> surprise on secret test text &nbsp; (lower is better)</p>
+      </div>
+      <div class="panel-row">
+        <div class="panel">
+          <span class="label">How confused is it?</span>
+          <span class="big" id="rp-conf"></span>
+          <div class="dots" id="rp-dots"></div>
+          <span class="stage" id="rp-stage"></span>
+          <p class="note" id="rp-stage-text"></p>
+        </div>
+        <div class="panel">
+          <span class="label">What letter comes next?</span>
+          <div class="ctx" id="rp-ctx" style="font-size:14px"></div>
+          <div class="bars" id="rp-bars"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <span class="label">Where it's looking (attention)</span>
+        <div class="att" id="rp-att"></div>
+      </div>
+      <div class="panel-row">
+        <div class="panel"><span class="label">What it writes at this moment</span><pre class="term" id="rp-sample"></pre></div>
+        <div class="panel"><span class="label">What it wrote at the very start</span><pre class="term" id="rp-first"></pre></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. SCALE -->
+  <section class="lesson" id="scale" hidden>
+    <div class="explain">
+      <h2>Tiny vs. giant</h2>
+      <p>You built the same kind of machine as ChatGPT. The difference is <b>scale</b>: how big the brain is, how much it reads, and how long it trains.</p>
+      <p>The bars use a "times 10" scale. Each grid step is 10 times bigger than the one before, otherwise your model would be invisible.</p>
+      <p class="note">Numbers for other models are from their published papers and model cards. Many newer models don't publish theirs.</p>
+    </div>
+    <div class="bench">
+      <div class="panel">
+        <span class="label">Brain size (parameters)</span>
+        <div id="scale-params" style="display:grid;gap:8px"></div>
+      </div>
+      <div class="panel">
+        <span class="label">Text read during training (printed pages, about 3,000 characters each)</span>
+        <div id="scale-text" style="display:grid;gap:8px"></div>
+        <p class="note" id="scale-stack"></p>
+      </div>
+      <div class="panel">
+        <span class="label">Training time</span>
+        <p><b>Yours:</b> about 7 minutes on one free GPU.<br>
+        <b>Llama 3.1 405B:</b> about 31 million GPU-hours on top-end chips. On a single GPU that would take about <b>3,500 years</b>.</p>
+      </div>
+      <div class="panel">
+        <span class="label">From your model to a chatbot</span>
+        <ol class="steps">
+          <li class="done"><div><b>Pre-training</b> (what you did): read lots of text and learn to guess what comes next. The result can continue text, but it can't answer questions.</div></li>
+          <li><div><b>Instruction tuning</b>: keep training on examples of questions paired with good answers, so it learns to act like an assistant.</div></li>
+          <li><div><b>Learning from feedback</b>: people (and other models) rate its answers, and it's trained to give the ones rated helpful, honest and safe.</div></li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Built for a 50-minute high-school class. The model code is adapted from Andrej Karpathy's
+    <a href="https://github.com/karpathy/nanoGPT">nanoGPT</a>. The counting model and Shakespeare text run entirely in your browser.
+  </footer>
+</div>
+
+<script>
+const CORPUS = /*__CORPUS__*/"";
+const HELD = /*__HELD__*/"";
+const VOCAB = /*__VOCAB__*/"";
+const MEM_CONFUSION = /*__MEM_CONFUSION__*/[];
+const EXAMPLE_LOG = /*__EXAMPLE_LOG__*/null;
+
+const $ = (id) => document.getElementById(id);
+const show = (c) => ({ " ": "␣", "\n": "↵", "\t": "⇥" }[c] ?? c);
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const STAGES = [
+  [25, "🍼 Babbling", "Random characters. It hasn't learned anything yet."],
+  [13, "🔤 Learning the alphabet", "It's figured out which characters are common (spaces, e, t, a...)."],
+  [7.5, "🧩 Making word-shaped chunks", "It knows which letters tend to go together, like 'th' and 'ing'."],
+  [5, "📖 Spelling real words", "Real words are appearing, and the layout of the text is taking shape."],
+  [0, "🎭 Writing with style", "Words, punctuation and structure that look like the original text."],
+];
+const stageFor = (conf) => STAGES.find((s) => conf >= s[0]) || STAGES[STAGES.length - 1];
+
+/* ---------- counting (n-gram) model, built from the Shakespeare text in the page ---------- */
+const VIDX = new Map([...VOCAB].map((c, i) => [c, i]));
+const uni = new Float64Array(VOCAB.length);
+for (const c of CORPUS) uni[VIDX.get(c)]++;
+const uniP = uni.map((n) => (n + 1) / (CORPUS.length + VOCAB.length));
+const countCache = new Map();
+function countsAfter(ctx) {
+  let hit = countCache.get(ctx);
+  if (hit) return hit;
+  const counts = new Map();
+  let total = 0;
+  for (let i = CORPUS.indexOf(ctx); i !== -1 && i + ctx.length < CORPUS.length; i = CORPUS.indexOf(ctx, i + 1)) {
+    const c = CORPUS[i + ctx.length];
+    counts.set(c, (counts.get(c) || 0) + 1);
+    total++;
+  }
+  hit = { counts, total };
+  if (countCache.size > 50000) countCache.clear();
+  countCache.set(ctx, hit);
+  return hit;
+}
+// probability of every next character, looking back `k` characters (falls back smoothly to shorter memories)
+function nextProbs(text, k) {
+  let p = Float64Array.from(uniP);
+  for (let j = 1; j <= k && j <= text.length; j++) {
+    const { counts, total } = countsAfter(text.slice(-j));
+    if (!total) break;
+    const b = counts.size;
+    const q = p.map((v) => (b * v) / (total + b));
+    for (const [c, n] of counts) q[VIDX.get(c)] += n / (total + b);
+    p = q;
+  }
+  return p;
+}
+function withTemperature(p, t) {
+  const q = p.map((v) => Math.pow(v, 1 / t));
+  const s = q.reduce((a, b) => a + b, 0);
+  return q.map((v) => v / s);
+}
+function rollDice(p) {
+  let r = Math.random();
+  for (let i = 0; i < p.length; i++) { r -= p[i]; if (r <= 0) return VOCAB[i]; }
+  return VOCAB[p.length - 1];
+}
+function topGuesses(p, n) {
+  return [...p].map((v, i) => [VOCAB[i], v]).sort((a, b) => b[1] - a[1]).slice(0, n);
+}
+function writeText(prompt, k, length, t) {
+  let out = prompt;
+  for (let i = 0; i < length; i++) out += rollDice(withTemperature(nextProbs(out, k), t));
+  return out.slice(prompt.length);
+}
+function barsHTML(guesses, answer) {
+  return guesses.map(([c, p]) => `<div class="bar${c === answer ? " answer" : ""}"><span class="ch">${esc(show(c))}</span>` +
+    `<div class="track"><div class="fill" style="width:${Math.max(p * 100, 0.6).toFixed(1)}%"></div></div>` +
+    `<span class="pct">${(p * 100).toFixed(1)}%</span></div>`).join("");
+}
+function dotsHTML(n, total) {
+  let s = "";
+  for (let i = 0; i < total; i++) s += i < n ? '<span class="on"></span>' : "<span></span>";
+  return s;
+}
+function attentionHTML(context, weights) {
+  const mx = Math.max(...weights) || 1;
+  let s = "";
+  [...context].forEach((c, i) => {
+    const a = Math.pow((weights[i] || 0) / mx, 0.7);
+    s += `<span style="background:rgba(var(--glow-rgb),${a.toFixed(2)})${a > 0.55 ? ";color:var(--term)" : ""}">${esc(show(c))}</span>`;
+    if (c === "\n") s += "<br>";
+  });
+  return s + '<span class="q">?</span>';
+}
+
+/* ---------- hero ---------- */
+(function hero() {
+  const target = "TO BE OR NOT TO BE";
+  const el = $("hero");
+  const tiles = [...target].map((c) => {
+    const t = document.createElement("span");
+    t.className = "tile";
+    t.innerHTML = `<b>${c === " " ? "&nbsp;" : c}</b><small>${c === " " ? "1" : VIDX.get(c)}</small>`;
+    el.appendChild(t);
+    return t;
+  });
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ$&!?;:";
+  let frame = 0;
+  const timer = setInterval(() => {
+    frame++;
+    tiles.forEach((t, i) => {
+      const c = target[i];
+      if (c === " ") return;
+      const settled = frame > 6 + i * 1.5;
+      const ch = settled ? c : letters[Math.floor(Math.random() * letters.length)];
+      t.innerHTML = `<b>${ch}</b><small>${VIDX.get(ch) ?? "?"}</small>`;
+      t.classList.toggle("hit", settled && frame < 6 + i * 1.5 + 4);
+    });
+    if (frame > 6 + target.length * 1.5 + 5) { clearInterval(timer); tiles.forEach((t) => t.classList.remove("hit")); }
+  }, 70);
+})();
+
+/* ---------- 1. tokens ---------- */
+function renderTokens() {
+  const text = $("tok-input").value;
+  let unknown = 0;
+  $("tok-tiles").innerHTML = [...text].map((c) => {
+    const id = VIDX.get(c);
+    if (id === undefined) { unknown++; return `<span class="tile unknown" title="Not in the model's alphabet"><b>${esc(c)}</b><small>??</small></span>`; }
+    return `<span class="tile"><b>${esc(show(c))}</b><small>${id}</small></span>`;
+  }).join("");
+  const n = [...text].length;
+  $("tok-summary").textContent = `${n} characters → ${n - unknown} tokens` +
+    (unknown ? `. ${unknown} character${unknown > 1 ? "s" : ""} in red ${unknown > 1 ? "are" : "is"} not in the alphabet, so the model would skip ${unknown > 1 ? "them" : "it"}.` : ".");
+}
+$("tok-input").addEventListener("input", renderTokens);
+$("vocab-tiles").innerHTML = [...VOCAB].map((c, i) => `<span class="tile"><b>${esc(show(c))}</b><small>${i}</small></span>`).join("");
+renderTokens();
+
+/* ---------- 2. guessing game ---------- */
+const GAME_K = 4;
+const game = { you: 0, model: 0, rounds: 0, answered: false, ctx: "", answer: "" };
+function newRound() {
+  let pos;
+  do { pos = 120 + Math.floor(Math.random() * (HELD.length - 240)); } while (!/[a-z]/.test(HELD[pos]) || !/[a-z]/.test(HELD[pos - 1]));
+  const start = HELD.lastIndexOf("\n", pos - 70);
+  game.ctx = HELD.slice(Math.max(start + 1, pos - 110), pos);
+  game.answer = HELD[pos];
+  game.answered = false;
+  $("game-ctx").innerHTML = esc(game.ctx) + '<span class="cursor">?</span>';
+  $("game-result").hidden = true;
+  $("game-next").hidden = true;
+  $("game-skip").hidden = false;
+  $("game-input").value = "";
+  $("game-input").disabled = false;
+}
+function finishRound(guess) {
+  if (game.answered) return;
+  game.answered = true;
+  const p = nextProbs(game.ctx, GAME_K);
+  const guesses = topGuesses(p, 6);
+  const modelRight = guesses[0][0] === game.answer;
+  const youRight = guess === game.answer;
+  game.rounds++;
+  if (modelRight) game.model++;
+  if (youRight) game.you++;
+  $("game-ctx").innerHTML = esc(game.ctx) + `<span class="cursor" style="color:var(--good);border-color:var(--good)">${esc(show(game.answer))}</span>`;
+  const v = $("game-verdict");
+  if (guess === null) { v.className = "verdict"; v.textContent = `The answer was "${show(game.answer)}".`; }
+  else { v.className = "verdict " + (youRight ? "yes" : "no"); v.textContent = youRight ? `✓ Yes! It was "${show(game.answer)}".` : `✗ You said "${show(guess)}", it was "${show(game.answer)}".`; }
+  $("game-bars").innerHTML = barsHTML(guesses, game.answer);
+  const pa = p[VIDX.get(game.answer)];
+  $("game-surprise").innerHTML = pa > 0.5 ? `Not very. It gave the right answer a <b>${(pa * 100).toFixed(0)}%</b> chance.`
+    : pa > 0.1 ? `A little. It gave the right answer a <b>${(pa * 100).toFixed(0)}%</b> chance.`
+    : `Very! It gave the right answer only a <b>${(pa * 100).toFixed(1)}%</b> chance. This is the kind of mistake training fixes.`;
+  $("score-you").textContent = `${game.you} / ${game.rounds}`;
+  $("score-model").textContent = `${game.model} / ${game.rounds}`;
+  $("game-result").hidden = false;
+  $("game-next").hidden = false;
+  $("game-skip").hidden = true;
+  $("game-input").disabled = true;
+  $("game-next").focus();
+}
+$("game-input").addEventListener("input", (e) => { if (e.target.value) finishRound(e.target.value); });
+$("game-skip").addEventListener("click", () => finishRound(null));
+$("game-next").addEventListener("click", () => { newRound(); $("game-input").focus(); });
+newRound();
+
+/* ---------- 3. memory ---------- */
+function memChart(k, transformer) {
+  const w = 460, h = 190, L = 34, R = 10, T = 12, B = 30;
+  const ymax = 28;
+  const bw = (w - L - R) / MEM_CONFUSION.length;
+  const Y = (v) => T + (1 - v / ymax) * (h - T - B);
+  let s = `<svg viewBox="0 0 ${w} ${h}" width="100%" style="max-width:${w}px;display:block" role="img" aria-label="Confusion for each memory length">`;
+  for (const v of [0, 5, 10, 15, 20, 25]) s += `<line x1="${L}" x2="${w - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`;
+  MEM_CONFUSION.forEach((v, i) => {
+    const x = L + i * bw + 3;
+    s += `<rect x="${x}" y="${Y(v)}" width="${bw - 6}" height="${Y(0) - Y(v)}" rx="3" fill="${i === k ? "var(--accent)" : "var(--accent-soft)"}"/>`;
+    s += `<text x="${x + (bw - 6) / 2}" y="${h - 12}" text-anchor="middle">${i}</text>`;
+  });
+  if (transformer) {
+    s += `<line x1="${L}" x2="${w - R}" y1="${Y(transformer)}" y2="${Y(transformer)}" stroke="var(--glow)" stroke-width="2" stroke-dasharray="6 4"/>`;
+    s += `<text x="${w - R}" y="${Y(transformer) - 6}" text-anchor="end" style="fill:var(--glow)">Transformer (looks back 128): ${transformer.toFixed(1)}</text>`;
+  }
+  s += `<text x="${L + (w - L - R) / 2}" y="${h - 1}" text-anchor="middle">letters it looks back at</text></svg>`;
+  return s;
+}
+function renderMemory(resample) {
+  const k = +$("mem-k").value;
+  $("mem-k-out").textContent = k;
+  const conf = MEM_CONFUSION[k];
+  $("mem-conf").textContent = `like picking from ${conf.toFixed(1)}`;
+  $("mem-dots").innerHTML = dotsHTML(Math.round(conf), VOCAB.length);
+  const snaps = (currentLog || EXAMPLE_LOG)?.snapshots;
+  const transformer = currentLog?.dataset === "shakespeare" || !currentLog ? (snaps ? Math.exp(snaps[snaps.length - 1].val) : null) : null;
+  $("mem-chart").innerHTML = memChart(k, transformer);
+  if (resample !== false) $("mem-sample").textContent = "\n" + writeText("\n", k, 260, 0.8).trimEnd();
+}
+$("mem-k").addEventListener("input", () => renderMemory());
+$("mem-again").addEventListener("click", () => renderMemory());
+
+/* ---------- 4. dice ---------- */
+const DICE_K = 6;
+let diceText = "";
+function renderDice() {
+  const t = +$("dice-t").value;
+  $("dice-t-out").textContent = t.toFixed(2).replace(/0$/, "");
+  const prompt = $("dice-prompt").value;
+  const p = withTemperature(nextProbs(prompt + diceText, DICE_K), t);
+  $("dice-bars").innerHTML = barsHTML(topGuesses(p, 10));
+  $("dice-out").innerHTML = esc(prompt) + `<span class="new">${esc(diceText)}</span>`;
+  $("dice-out").scrollTop = $("dice-out").scrollHeight;
+  return p;
+}
+$("dice-t").addEventListener("input", renderDice);
+$("dice-prompt").addEventListener("input", () => { diceText = ""; renderDice(); });
+$("dice-roll").addEventListener("click", () => { diceText += rollDice(renderDice()); renderDice(); });
+$("dice-reset").addEventListener("click", () => { diceText = ""; renderDice(); });
+$("dice-many").addEventListener("click", () => {
+  const btn = $("dice-many");
+  btn.disabled = true;
+  let n = 0;
+  const tick = () => {
+    for (let i = 0; i < 3 && n < 120; i++, n++) diceText += rollDice(withTemperature(nextProbs($("dice-prompt").value + diceText, DICE_K), +$("dice-t").value));
+    renderDice();
+    if (n < 120) requestAnimationFrame(tick); else btn.disabled = false;
+  };
+  tick();
+});
+
+/* ---------- 5. attention ---------- */
+const SENTENCES = [
+  { words: "The animal didn't cross the street because it was too tired".split(" "),
+    focus: 7, weights: [0.05, 0.95, 0.1, 0.05, 0.02, 0.25, 0.05, 0.3, 0.1, 0.15, 0.6],
+    text: "To work out what <b>it</b> means, the model pays the most attention to <b>animal</b>. Streets don't get tired, but animals do." },
+  { words: "The animal didn't cross the street because it was too wide".split(" "),
+    focus: 7, weights: [0.05, 0.25, 0.1, 0.05, 0.05, 0.95, 0.05, 0.3, 0.1, 0.15, 0.6],
+    text: "Change one word and <b>it</b> now pays the most attention to <b>street</b>. Animals aren't \"wide\", but streets are." },
+];
+let sentence = 0, selWord = 7;
+function renderWords() {
+  const s = SENTENCES[sentence];
+  $("att-words").innerHTML = s.words.map((w, i) => {
+    let a = 0;
+    if (selWord === s.focus) a = i === selWord ? 0 : s.weights[i];
+    else if (i < selWord) a = 0.12 + 0.5 * Math.exp(-(selWord - i - 1) / 1.5) * 0.8;
+    return `<button data-i="${i}" class="${i === selWord ? "sel" : ""}" style="--a:${i > selWord ? 0 : a.toFixed(2)}${i <= selWord && a > 0.55 ? ";color:var(--term)" : ""}">${esc(w)}</button>`;
+  }).join("");
+  $("att-explain").innerHTML = selWord === s.focus ? s.text
+    : `Here the word <b>${esc(s.words[selWord])}</b> mostly looks at the words just before it. It can only look backwards, never at words that haven't been written yet. Click <b>it</b> to see something more interesting.`;
+  ["att-s0", "att-s1"].forEach((id, i) => $(id).classList.toggle("ghost", i !== sentence));
+}
+$("att-words").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { selWord = +b.dataset.i; renderWords(); } });
+$("att-s0").addEventListener("click", () => { sentence = 0; selWord = 7; renderWords(); });
+$("att-s1").addEventListener("click", () => { sentence = 1; selWord = 7; renderWords(); });
+renderWords();
+function renderRealAttention() {
+  const log = currentLog || EXAMPLE_LOG;
+  if (!log) return;
+  const snap = log.snapshots[log.snapshots.length - 1];
+  const ctx = log.watch_context.slice(-snap.attn.length);
+  $("att-source").textContent = currentLog ? "your model" : "the example model";
+  $("att-real").innerHTML = attentionHTML(ctx, snap.attn);
+}
+
+/* ---------- 6. replay ---------- */
+let currentLog = null, rpTimer = null;
+function lossChart(log, upto) {
+  const w = 640, h = 220, L = 34, R = 12, T = 12, B = 28;
+  const total = log.total_seconds || Math.max(...log.snapshots.map((s) => s.t), 1);
+  const ymax = Math.max(4, Math.ceil(Math.log(log.vocab.length) + 0.3));
+  const X = (t) => L + Math.min(t / total, 1) * (w - L - R);
+  const Y = (v) => T + (1 - Math.min(v, ymax) / ymax) * (h - T - B);
+  let s = `<svg viewBox="0 0 ${w} ${h}" width="100%" style="min-width:420px;display:block" role="img" aria-label="Surprise score over training time">`;
+  for (let v = 0; v <= ymax; v++) s += `<line x1="${L}" x2="${w - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`;
+  const mins = total / 60, stepM = mins <= 10 ? 1 : mins <= 30 ? 5 : 10;
+  for (let m = 0; m <= mins + 1e-9; m += stepM) s += `<text x="${X(m * 60)}" y="${h - 8}" text-anchor="middle">${m}m</text>`;
+  const pts = log.train_pts.filter((p) => p[0] <= upto);
+  if (pts.length > 1) s += `<polyline points="${pts.map((p) => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(" ")}" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round"/>`;
+  const ghost = log.train_pts.filter((p) => p[0] > upto);
+  if (ghost.length > 1) s += `<polyline points="${ghost.map((p) => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(" ")}" fill="none" stroke="var(--line)" stroke-width="2"/>`;
+  for (const sn of log.snapshots) if (sn.t <= upto) s += `<circle cx="${X(sn.t)}" cy="${Y(sn.val)}" r="4" fill="var(--glow)" stroke="var(--surface)" stroke-width="1.2"/>`;
+  s += `<line x1="${X(upto)}" x2="${X(upto)}" y1="${T}" y2="${h - B}" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="3 3"/>`;
+  return s + "</svg>";
+}
+function renderReplay() {
+  const log = currentLog || EXAMPLE_LOG;
+  if (!log) return;
+  const i = +$("rp-slider").value;
+  const sn = log.snapshots[i];
+  const conf = Math.exp(sn.val);
+  const [, stage, stageText] = stageFor(conf);
+  const tokens = sn.step * (log.batch_size || 64) * log.config.block_size;
+  $("rp-when").textContent = `${fmtTime(sn.t)} into training · practice round ${sn.step.toLocaleString()}`;
+  $("rp-stats").textContent = `read ${(tokens / log.data_len).toFixed(1)}× through the text`;
+  $("rp-chart").innerHTML = lossChart(log, sn.t);
+  $("rp-conf").textContent = `like picking from ${conf.toFixed(1)}`;
+  $("rp-dots").innerHTML = dotsHTML(Math.max(1, Math.round(conf)), log.vocab.length);
+  $("rp-stage").textContent = stage;
+  $("rp-stage-text").textContent = stageText;
+  $("rp-ctx").innerHTML = "…" + esc(log.watch_context.slice(-60)).replace(/\n/g, "↵") + '<span class="cursor">?</span>';
+  $("rp-bars").innerHTML = barsHTML(sn.guesses, log.watch_answer);
+  $("rp-att").innerHTML = attentionHTML(log.watch_context.slice(-sn.attn.length), sn.attn);
+  $("rp-sample").textContent = sn.sample;
+  $("rp-first").textContent = log.snapshots[0].sample;
+}
+function fmtTime(t) { const m = Math.floor(t / 60), s = Math.round(t % 60); return m ? `${m} min ${s} s` : `${s} s`; }
+function useLog(log, label) {
+  if (rpTimer) togglePlay();
+  $("rp-source").textContent = label;
+  $("rp-slider").max = log.snapshots.length - 1;
+  $("rp-slider").value = log.snapshots.length - 1;
+  renderReplay();
+  renderRealAttention();
+  renderMemory(false);
+  renderScale();
+}
+function togglePlay() {
+  if (rpTimer) { clearInterval(rpTimer); rpTimer = null; $("rp-play").textContent = "▶ Play"; return; }
+  const sl = $("rp-slider");
+  if (+sl.value >= +sl.max) sl.value = 0;
+  $("rp-play").textContent = "⏸ Pause";
+  renderReplay();
+  rpTimer = setInterval(() => {
+    if (+sl.value >= +sl.max) { togglePlay(); return; }
+    sl.value = +sl.value + 1;
+    renderReplay();
+  }, 650);
+}
+function loadFile(file) {
+  file.text().then((txt) => {
+    const log = JSON.parse(txt);
+    if (!log.snapshots?.length || !log.watch_context) throw new Error("missing snapshots");
+    currentLog = log;
+    useLog(log, `Your run · ${log.dataset} · ${log.model_size} model · ${(log.n_params / 1e6).toFixed(1)}M parameters`);
+  }).catch(() => { $("rp-source").textContent = "That file isn't a training_log.json from the notebook. Try again."; });
+}
+$("rp-play").addEventListener("click", togglePlay);
+$("rp-slider").addEventListener("input", renderReplay);
+$("rp-file").addEventListener("change", (e) => e.target.files[0] && loadFile(e.target.files[0]));
+const drop = $("drop");
+["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => e.dataTransfer.files[0] && loadFile(e.dataTransfer.files[0]));
+
+/* ---------- 7. scale ---------- */
+function scaleRows(rows, minExp, maxExp, fmt) {
+  return rows.map(([name, v, you]) => {
+    const pct = Math.max(0, (Math.log10(v) - minExp) / (maxExp - minExp)) * 100;
+    return `<div class="scale-row${you ? " you" : ""}"><span>${name}</span><div class="track">` +
+      `<div class="fill" style="width:${pct.toFixed(1)}%"></div>` +
+      (pct > 55 ? `<span class="val inside">${fmt(v)}</span>` : `<span class="val" style="left:calc(${pct.toFixed(1)}% + 8px)">${fmt(v)}</span>`) + "</div></div>";
+  }).join("");
+}
+function human(n) {
+  for (const [d, w] of [[1e12, "trillion"], [1e9, "billion"], [1e6, "million"], [1e3, "thousand"]]) if (n >= d) return `${+(n / d).toFixed(1)} ${w}`;
+  return `${Math.round(n)}`;
+}
+function renderScale() {
+  const log = currentLog || EXAMPLE_LOG;
+  const yourParams = log?.n_params || 4.8e6;
+  const yourChars = log ? log.data_len / 0.9 : 1.1e6;
+  $("scale-params").innerHTML = scaleRows([
+    ["Your model", yourParams, true], ["GPT-2 (2019)", 1.5e9], ["GPT-3 (2020)", 175e9], ["Llama 3.1 (2024)", 405e9],
+  ], 5, 12, human);
+  const pages = (chars) => chars / 3000;
+  $("scale-text").innerHTML = scaleRows([
+    ["Your model", pages(yourChars), true], ["GPT-2 (2019)", pages(40e9)], ["GPT-3 (2020)", pages(300e9 * 4)], ["Llama 3.1 (2024)", pages(15e12 * 4)],
+  ], 1, 11, (v) => `${human(v)} pages`);
+  const cm = pages(yourChars) * 0.01;
+  $("scale-stack").innerHTML = `Printed and stacked, your model's text would be about <b>${cm.toFixed(0)} cm</b> tall, like a thick book. ` +
+    `Llama 3.1's would be about <b>2,000 km</b> tall, five times higher than the International Space Station orbits.`;
+}
+
+/* ---------- tabs ---------- */
+const SECTIONS = ["tokens", "guess", "memory", "dice", "attention", "replay", "scale"];
+function route() {
+  const id = SECTIONS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "tokens";
+  SECTIONS.forEach((s) => { $(s).hidden = s !== id; });
+  document.querySelectorAll("nav.tabs a").forEach((a) => a.setAttribute("aria-current", a.getAttribute("href") === "#" + id ? "page" : "false"));
+  if (id === "memory" && !$("mem-sample").textContent) renderMemory();
+  if (id === "dice") renderDice();
+  if (id === "guess") $("game-input").focus({ preventScroll: true });
+}
+document.querySelectorAll("nav.tabs a").forEach((a) => a.addEventListener("click", (e) => {
+  e.preventDefault();
+  history.replaceState(null, "", a.getAttribute("href"));
+  route();
+  a.scrollIntoView({ block: "nearest", inline: "nearest" });
+}));
+addEventListener("hashchange", route);
+
+if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+addEventListener("load", () => scrollTo(0, 0));
+if (EXAMPLE_LOG) useLog(EXAMPLE_LOG, `Example run · Shakespeare · ${(EXAMPLE_LOG.n_params / 1e6).toFixed(1)}M parameters · trained ${Math.round(EXAMPLE_LOG.total_seconds / 60)} min on a CPU`);
+else renderScale();
+route();
+</script>

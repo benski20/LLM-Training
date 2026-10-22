@@ -1,0 +1,6 @@
+__pycache__/
+.ipynb_checkpoints/
+notebooks/my_model.pt
+notebooks/training_log.json
+my_model.pt
+training_log.json
