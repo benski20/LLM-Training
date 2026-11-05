@@ -30,11 +30,12 @@ Today you will build a **language model**: the same kind of AI that ChatGPT, Cla
 Ours reads one **letter** at a time. It starts out knowing nothing, so it types random gibberish. In a few minutes of training it will learn to write text that looks like Shakespeare.
 
 ### ▶️ Do this right now
-1. **Turn on the GPU.** On Kaggle: open the right-hand panel → **Session options** → **Accelerator** → **GPU T4 x2**. On Colab: **Runtime → Change runtime type → T4 GPU**.
-2. Click **Run All**. On Kaggle it's at the top; on Colab it's **Runtime → Run all**.
-3. Scroll down to the **🚀 Training** section and watch the live dashboard while your teacher explains what's happening.
+1. **Turn on the GPU.** Kaggle: right-hand panel → **Session options** → **Accelerator** → **GPU T4 x2**, and check **Internet** is on. Colab: **Runtime → Change runtime type → T4 GPU**.
+2. In the **Settings** cell below, type your teacher's **class code** and a **nickname**, so your training shows up live on the class board.
+3. Click **Run All**. On Kaggle it's at the top; on Colab it's **Runtime → Run all**.
+4. Scroll down to **🚀 Training** and watch the live dashboard while your teacher explains what's happening.
 
-Training takes about 7 minutes. While you wait, read through the notebook from the top.
+Training takes 6 minutes. While you wait, read through the notebook from the top.
 ''')
 
 md(r'''
@@ -47,9 +48,12 @@ code(r'''
 # ⚙️ SETTINGS
 DATASET = "shakespeare"   # what the model reads. Try: "shakespeare", "sherlock", "names", "python_code"
                           # ...or the path to your own .txt file, like "/kaggle/input/my-data/lyrics.txt"
-TRAIN_MINUTES = 7         # how long to train. Longer = better writing (up to a point)
+TRAIN_MINUTES = 6         # how long to train. Longer = better writing (up to a point)
 MODEL_SIZE = "medium"     # "small" (fast but dumb), "medium", or "large" (smarter, needs more time)
 WATCH_PROMPT = None       # text the dashboard uses for "what letter comes next?" (None = pick one for you)
+
+CLASS_CODE = ""           # from your teacher, like "room-4821". Leave "" to keep your training private
+NICKNAME = "anonymous"    # how you appear on the class board (please don't use your full name)
 ''')
 
 md(r'''
@@ -84,6 +88,34 @@ else:
     print("⚠️  No working GPU found, so training will be VERY slow.\n"
           "   Kaggle: right panel → Session options → Accelerator → 'GPU T4 x2', then Run All again.\n"
           "   Colab: Runtime → Change runtime type → T4 GPU.")
+
+# 📡 Class board: if you typed a class code, send a short progress update every minute or so.
+# It goes through ntfy.sh, a free public message relay. Only your nickname, scores and writing samples are sent.
+import re, threading, uuid
+LIVE_RELAY = "https://ntfy.sh"
+live_topic = "tinyllm-" + re.sub(r"[^A-Za-z0-9_-]", "", CLASS_CODE.strip().lower())[:40] if CLASS_CODE.strip() else None
+run_id = uuid.uuid4().hex[:8]
+_live_warned = False
+
+def send_live(update):
+    def post():
+        global _live_warned
+        body = json.dumps(dict(v=1, run=run_id, nick=NICKNAME[:24], **update)).encode()
+        for wait in (0, 10, 25, 45):   # the relay limits how fast each address can post, so retry politely
+            time.sleep(wait)
+            try:
+                urllib.request.urlopen(urllib.request.Request(f"{LIVE_RELAY}/{live_topic}", data=body, method="POST"), timeout=8)
+                return
+            except Exception as e:
+                error = e
+        if not _live_warned:
+            _live_warned = True
+            print(f"(Couldn't reach the class board: {error}. Training continues. Is Internet on?)")
+    if live_topic:
+        threading.Thread(target=post, daemon=True).start()
+
+if live_topic:
+    print(f"📡 Class board: sending live updates as '{NICKNAME}' to class code '{CLASS_CODE}'")
 ''')
 
 md(r'''
@@ -581,7 +613,8 @@ LEARNING_RATE = 1e-3      # how big each nudge is
 if start_fresh:
     torch.manual_seed(1337)
     model = GPT(cfg).to(device)
-optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE, betas=(0.9, 0.99), weight_decay=0.1)
+optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE, betas=(0.9, 0.99), weight_decay=0.1,
+                              fused=device == "cuda")
 use_amp = device == "cuda"   # use faster, lower-precision maths on the GPU
 scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
 train_gpu, val_gpu = train_data.to(device), val_data.to(device)
@@ -632,9 +665,15 @@ def take_snapshot(step, elapsed):
     log["snapshots"].append(snap)
     model.train()
 
+def send_progress(step, elapsed, done=False):
+    snap = log["snapshots"][-1]
+    send_live(dict(dataset=DATASET, size=MODEL_SIZE, step=step, t=round(elapsed), total=total_seconds,
+                   val=round(snap["val"], 4), train=round(smooth_loss or snap["val"], 4), vocab=vocab_size,
+                   sample=snap["sample"][:160], done=done))
+
 dashboard = display(HTML(render_dashboard(state)), display_id=True)
 model.train()
-smooth_loss, step, last_draw, next_timed_snapshot = None, 0, 0.0, 30.0
+smooth_loss, step, last_draw, next_timed_snapshot, last_sent = None, 0, 0.0, 30.0, -1e9
 start = time.time()
 paused = 0.0   # time spent drawing the dashboard doesn't count against training time
 
@@ -647,6 +686,9 @@ while True:
         take_snapshot(step, elapsed)
         if elapsed >= next_timed_snapshot:
             next_timed_snapshot += 30.0
+        if elapsed - last_sent >= 70:   # a class-board update about every 75 seconds
+            send_progress(step, elapsed)
+            last_sent = elapsed
         paused += time.time() - t0
 
     # learning rate: warm up gently, then take smaller and smaller steps as training goes on
@@ -675,6 +717,7 @@ while True:
         last_draw = time.time()
 
 take_snapshot(step, total_seconds)
+send_progress(step, total_seconds, done=True)
 state.update(step=step, elapsed=total_seconds, done=True, tokens_seen=step * BATCH_SIZE * cfg.block_size)
 dashboard.update(HTML(render_dashboard(state)))
 log["final_step"] = step
@@ -766,7 +809,7 @@ md(r'''
 2. **Baby-name inventor.** Set `DATASET = "names"`. Then run `generate_text("\n", 300)`. Are the names real, or did it invent new ones?
 3. **Robot programmer.** Set `DATASET = "python_code"`. Does it learn indentation and `def`?
 4. **Your own data.** Make a `.txt` file (lyrics, your favourite book, a chat log, recipes), at least ~200 KB for good results. On Kaggle: **+ Add Input → Upload → New Dataset**. Then set `DATASET = "/kaggle/input/<your-dataset>/<file>.txt"`.
-5. **Brain surgery.** Try `MODEL_SIZE = "small"` vs `"large"`. Does a bigger brain write better in the same 7 minutes?
+5. **Brain surgery.** Try `MODEL_SIZE = "small"` vs `"large"`. Does a bigger brain write better in the same 6 minutes?
 6. **Patience.** Set `TRAIN_MINUTES = 15`. How much better does it get? Does it ever stop improving?
 
 ### 🤔 Think about it
@@ -816,7 +859,8 @@ def build(path):
             "language_info": {"name": "python"},
             "accelerator": "GPU",
             "colab": {"provenance": [], "gpuType": "T4"},
-            "kaggle": {"accelerator": "gpu", "isGpuEnabled": True, "isInternetEnabled": True},
+            "kaggle": {"accelerator": "nvidiaTeslaT4", "isGpuEnabled": True, "isInternetEnabled": True,
+                       "language": "python", "sourceType": "notebook", "dataSources": []},
         },
         "nbformat": 4,
         "nbformat_minor": 5,
